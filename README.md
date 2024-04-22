@@ -1,73 +1,68 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# POC - Cockatiel
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This is a project aimed to demonstrate the usage of the Cockatiel npm package.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Run Locally
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Installation
+Clone the project
 
 ```bash
-$ npm install
+  git clone https://link-to-project
 ```
 
-## Running the app
+Go to the project directory
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+  cd cockatiel
 ```
 
-## Test
+Install dependencies
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+  npm install
 ```
 
-## Support
+Start the server in development mode to experiment
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+  npm run dev
+```
 
-## Stay in touch
+By default the code will run on port 3000. Navigate to main.ts file to configure this.
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## Important Files
 
-## License
+**[policies.ts:](./src/common/policies.ts)** All the policies that we have configured can be found here.  
+**[errors.ts:](src/common/errors.ts)** All the custom made errors can be found here.  
+Apart from these, we have the user controller and service files where all the relevant requests will be handled.
 
-Nest is [MIT licensed](LICENSE).
+## About Cockatiel
+
+As mentioned in the [documentation](https://www.npmjs.com/package/cockatiel), Cockatiel is a package that helps us achieve resiliency towards transient errors (errors that arises from a temporary condition that might be resolved or corrected quickly).  
+Let's go through the features that Cockatiel provides us to make our code resilient.
+
+### Retry
+
+**Scenario:** Assume that you have a function which is prone to temporary network disruptions. Some of the function calls are failing due to this.
+
+**Solution:** If we try calling the function again, it might succeed. For this, we can use the retry functionality. We can configure the max number of attempts that we should make and the time interval between each attempts.
+
+> **_NOTE:_** _Before we go ahead and look at the implementation, not that there are two ways of implementation. One is to wrap our function call with a wrapper function and he other is using `@usePolicy` decorator. We will be using the decorator in our examples as it is more in aligned with NestJS._
+
+- First of all, to add some data to our database, call the below route with attached body.
+
+```
+POST /user
+{
+    "name": "Harry Potter",
+    "email": "theboywholived@hogwarts.com"
+}
+```
+
+- Next, we make a request to retrieve the user but with retry policy on. Monitor the logs to know the status of your request. The function will throw error if the network utilization is more than 75%.
+
+```
+GET /user/retry/?email=theboywholived@hogwarts.com
+```
+
+- The function that will decide the fate of our request is `getUserWithRetry` in service file. As you might see, if the utilization is more than 75%, the function is programmed to throw an `NetworkError` which has `shouldRetry` as `true`. So according to our RetryPolicy defined in policy.ts, the function is called again.

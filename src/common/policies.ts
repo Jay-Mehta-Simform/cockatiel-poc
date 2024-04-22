@@ -2,33 +2,42 @@ import {
   ConsecutiveBreaker,
   ConstantBackoff,
   TimeoutStrategy,
+  bulkhead,
   circuitBreaker,
+  fallback,
   handleAll,
+  handleType,
   handleWhen,
   retry,
   timeout,
   wrap,
 } from 'cockatiel';
-import { HttpError } from 'src/interfaces';
+import { HttpError } from './errors';
 
-// Retry 3 times for any error
 const RetryPolicy = retry(
-  handleWhen((err) => err instanceof HttpError),
+  handleType(HttpError, (err) => err.shouldRetry === true),
   {
     maxAttempts: 3,
     backoff: new ConstantBackoff(1 * 1000), // Time between retries
   },
 );
 
-const CircuitBreakerPolicy = circuitBreaker(handleAll, {
-  breaker: new ConsecutiveBreaker(4),
-  halfOpenAfter: 5 * 1000,
-});
+const CircuitBreakerPolicy = circuitBreaker(
+  handleWhen((err) => err instanceof HttpError),
+  {
+    breaker: new ConsecutiveBreaker(4),
+    halfOpenAfter: 5 * 1000,
+  },
+);
 
-const TimeoutPolicy = timeout(30, {
+const TimeoutPolicy = timeout(2 * 1000, {
   abortOnReturn: true,
   strategy: TimeoutStrategy.Aggressive,
 });
+
+const BulkheadPolicy = bulkhead(2, 2);
+
+const FallbackPolicy = fallback(handleAll, () => console.log('Falling back!'));
 
 const UnstableNetworkPolicy = wrap(CircuitBreakerPolicy, RetryPolicy);
 
@@ -37,4 +46,6 @@ export const POLICY = {
   CircuitBreakerPolicy,
   UnstableNetworkPolicy,
   TimeoutPolicy,
+  BulkheadPolicy,
+  FallbackPolicy,
 };

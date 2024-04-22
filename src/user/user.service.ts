@@ -1,16 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
+import { usePolicy } from 'cockatiel';
+import { POLICY } from 'src/common/policies';
 import { User } from 'src/entities/user.entity';
-import { NetworkError } from 'src/interfaces';
 import { Repository } from 'typeorm';
 import { AddUser } from './dto';
-import {
-  ICancellationContext,
-  IPolicy,
-  TaskCancelledError,
-  TimeoutPolicy,
-} from 'cockatiel';
+import { NetworkError } from 'src/common/errors';
 
 @Injectable()
 export class UserService {
@@ -32,33 +28,72 @@ export class UserService {
     });
   }
 
+  @usePolicy(POLICY.RetryPolicy)
+  async getUserWithRetry(email: string) {
+    // Decides whether the function will throw network error or not
+    this.successCriteriaForRetry({
+      timeThresholdForBandwidthRecovery: 1000,
+      bandwidthUtilizationReducer: 5,
+    });
+
+    return this.userRepository.findOne({ where: { email } });
+  }
+
+  @usePolicy(POLICY.UnstableNetworkPolicy)
   async networkExhaustion(email: string) {
-    //const bandwidthUtilization = Math.floor(Math.random() * (100 - 70) + 70);
-    //this.logger.verbose(
-    //  `Current bandwidth utilization: ${bandwidthUtilization}%`,
-    //);
+    this.successCriteriaForRetry();
+    return this.userRepository.findOne({ where: { email } });
+  }
 
-    //if (bandwidthUtilization > 75)
-    //  throw new NetworkError({
-    //    message: 'Timed out!',
-    //    shouldRetry: true,
-    //  });
+  @usePolicy(POLICY.TimeoutPolicy)
+  someTimeConsumingTask(email: string): Promise<User> {
+    const delay = Math.floor(Math.random() * (2050 - 1950) + 1950);
+    return new Promise((resolve) => {
+      setTimeout(async () => {
+        console.log('The data was found after', delay + '+ ms');
+        const user = await this.userRepository.findOne({ where: { email } });
+        resolve(user);
+      }, delay);
+    });
+  }
 
-    //return this.userRepository.findOne({ where: { email } });
+  @usePolicy(POLICY.BulkheadPolicy)
+  concurrentCallsNotRecommended(email: string) {
+    console.log(
+      'Execution slots available:',
+      POLICY.BulkheadPolicy.executionSlots,
+    );
+    console.log('Queue slots available:', POLICY.BulkheadPolicy.queueSlots);
+
+    return new Promise((resolve) => {
+      setTimeout(async () => {
+        const user = await this.userRepository.findOne({ where: { email } });
+        resolve(user);
+      }, 500);
+    });
+  }
+
+  @usePolicy(POLICY.FallbackPolicy as any)
+  failingFunction() {
+    throw new Error('Intentional error');
+  }
+
+  successCriteriaForRetry(options?: {
+    timeThresholdForBandwidthRecovery?: number;
+    bandwidthUtilizationReducer?: number;
+  }) {
+    const timeThresholdForBandwidthRecovery =
+      options.timeThresholdForBandwidthRecovery || 5 * 1000;
 
     const currentTime = Date.now();
     const elapsedTimeSinceLastInvocation =
       currentTime - this.lastInvocationTime;
-    const timeThresholdForBandwidthRecovery = 5 * 1000; // 5 seconds
-    // Decrease bandwidthUtilization gradually if not invoked recently
+
     if (elapsedTimeSinceLastInvocation > timeThresholdForBandwidthRecovery) {
-      this.bandwidthUtilization -= 10; // Decrease by 10% every 5 seconds
-      if (this.bandwidthUtilization < 70) {
-        this.bandwidthUtilization = 70; // Ensure utilization does not drop below 70%
-      }
+      this.bandwidthUtilization -= options.bandwidthUtilizationReducer || 10;
     }
 
-    // Update lastInvocationTime
+    // Update lastInvocationTimeForRetry
     this.lastInvocationTime = currentTime;
 
     this.logger.verbose(
@@ -71,45 +106,31 @@ export class UserService {
         shouldRetry: true,
       });
 
-    this.bandwidthUtilization = 90;
-
-    return this.userRepository.findOne({ where: { email } });
+    this.bandwidthUtilization = Math.floor(Math.random() * (100 - 75) + 75);
   }
 
-  //  @usePolicy(POLICY.TimeoutPolicy)
-  async someTimeConsumingTask(email: string, context: ICancellationContext) {
-    console.log('Function execution started');
-    console.log(context);
+  //checkNetworkBandwidth() {
+  //  const currentTime = Date.now();
+  //  const elapsedTimeSinceLastInvocation =
+  //    currentTime - this.lastInvocationTime;
+  //  const timeThresholdForBandwidthRecovery = 5 * 1000;
+  //  if (elapsedTimeSinceLastInvocation > timeThresholdForBandwidthRecovery) {
+  //    this.bandwidthUtilization -= 10;
+  //  }
 
-    //const fibonacciTarget = Math.floor(Math.random() * (25 - 20) + 20);
-    const fibonacciTarget = 35;
-    const result = await this.fibonacci(fibonacciTarget, context.signal);
-    console.log('Result', result);
-    console.log(context.signal.aborted);
-    return this.userRepository.findOne({ where: { email } });
-  }
+  //  // Update lastInvocationTime
+  //  this.lastInvocationTime = currentTime;
 
-  async fibonacci(n: number, signal: AbortSignal) {
-    // Check if the signal is aborted
-    if (signal.aborted) {
-      throw new TaskCancelledError('Task was cancelled due to timeout');
-    }
+  //  this.logger.verbose(
+  //    `Current bandwidth utilization: ${this.bandwidthUtilization}%`,
+  //  );
 
-    // Base cases
-    if (n <= 1) {
-      return n;
-    }
+  //  if (this.bandwidthUtilization > 75)
+  //    throw new NetworkError({
+  //      message: 'Timed out!',
+  //      shouldRetry: true,
+  //    });
 
-    // Recursive calls with the same signal
-    const left = await this.fibonacci(n - 1, signal);
-    const right = await this.fibonacci(n - 2, signal);
-
-    // Check if the signal is aborted after each recursive call
-    if (signal.aborted) {
-      throw new TaskCancelledError('Task was cancelled due to timeout');
-    }
-
-    // Combine results
-    return left + right;
-  }
+  //  this.bandwidthUtilization = Math.floor(Math.random() * (100 - 75) + 75);
+  //}
 }

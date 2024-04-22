@@ -1,5 +1,13 @@
-import { Body, Controller, Get, Logger, Post, Query } from '@nestjs/common';
-import { IPolicy, Policy, TaskCancelledError, TimeoutPolicy } from 'cockatiel';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Post,
+  Query,
+  RequestTimeoutException,
+} from '@nestjs/common';
+import { TaskCancelledError, TimeoutPolicy } from 'cockatiel';
 import { POLICY } from 'src/common/policies';
 import { AddUser } from './dto';
 import { UserService } from './user.service';
@@ -20,18 +28,23 @@ export class UserController {
     return this.userService.addUser(data);
   }
 
+  @Get('/retry')
+  async getUserWithRetry(@Query('email') email: string) {
+    try {
+      return this.userService.getUserWithRetry(email);
+    } catch (error) {
+      this.logger.error(error.message);
+    }
+  }
+
   @Get('/')
   async getUser(@Query('email') email: string) {
     try {
-      const data = await this.policy.execute(
-        // Depicts slow network, function works only if bandwidth utilization is less than 80%
-        (context) => this.userService.someTimeConsumingTask(email, context),
-      );
-      console.log(data);
+      const data = this.userService.concurrentCallsNotRecommended(email);
       return data;
     } catch (e) {
       if (e instanceof TaskCancelledError) {
-        return 'database timed out';
+        throw new RequestTimeoutException('Database timed out!');
       } else {
         throw e;
       }
