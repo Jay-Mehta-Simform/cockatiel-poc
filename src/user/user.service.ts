@@ -1,12 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { usePolicy } from 'cockatiel';
+import { NetworkError } from 'src/common/errors';
 import { POLICY } from 'src/common/policies';
 import { User } from 'src/entities/user.entity';
 import { Repository } from 'typeorm';
 import { AddUser } from './dto';
-import { NetworkError } from 'src/common/errors';
 
 @Injectable()
 export class UserService {
@@ -28,21 +28,36 @@ export class UserService {
     });
   }
 
+  /**
+   * A function with heavy network usage that returns user details
+   * @param {string} email Email address of the user to be found
+   * @throws {NetworkError} If the network bandwidth is not sufficient
+   * @throws {NotFoundException} If the user does not exist
+   * @returns {Promise<User>} User details
+   */
   @usePolicy(POLICY.RetryPolicy)
-  async getUserWithRetry(email: string) {
+  async getUserWithRetry(email: string): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) throw new NotFoundException('User does not exist!');
     // Decides whether the function will throw network error or not
-    this.successCriteriaForRetry({
+    this.checkNetworkBandwidth({
       timeThresholdForBandwidthRecovery: 1000,
       bandwidthUtilizationReducer: 5,
     });
-
-    return this.userRepository.findOne({ where: { email } });
+    return user;
   }
 
-  @usePolicy(POLICY.UnstableNetworkPolicy)
-  async networkExhaustion(email: string) {
-    this.successCriteriaForRetry();
-    return this.userRepository.findOne({ where: { email } });
+  @usePolicy(POLICY.CircuitBreakerPolicy)
+  async getUserWithCircuitBreaker(email: string): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) throw new NotFoundException('User does not exist!');
+
+    this.checkNetworkBandwidth({
+      timeThresholdForBandwidthRecovery: 5000,
+      bandwidthUtilizationReducer: 20,
+    });
+
+    return user;
   }
 
   @usePolicy(POLICY.TimeoutPolicy)
@@ -50,7 +65,7 @@ export class UserService {
     const delay = Math.floor(Math.random() * (2050 - 1950) + 1950);
     return new Promise((resolve) => {
       setTimeout(async () => {
-        console.log('The data was found after', delay + '+ ms');
+        this.logger.verbose(`The data was found after ${delay}+ ms`);
         const user = await this.userRepository.findOne({ where: { email } });
         resolve(user);
       }, delay);
@@ -59,38 +74,46 @@ export class UserService {
 
   @usePolicy(POLICY.BulkheadPolicy)
   concurrentCallsNotRecommended(email: string) {
-    console.log(
-      'Execution slots available:',
-      POLICY.BulkheadPolicy.executionSlots,
+    this.logger.verbose(
+      `Execution slots available: ${POLICY.BulkheadPolicy.executionSlots}`,
     );
-    console.log('Queue slots available:', POLICY.BulkheadPolicy.queueSlots);
+    this.logger.verbose(
+      `Queue slots available: ${POLICY.BulkheadPolicy.queueSlots}`,
+    );
 
     return new Promise((resolve) => {
       setTimeout(async () => {
         const user = await this.userRepository.findOne({ where: { email } });
         resolve(user);
-      }, 500);
+      }, 1000);
     });
   }
 
   @usePolicy(POLICY.FallbackPolicy as any)
-  failingFunction() {
-    throw new Error('Intentional error');
+  failingFunction(email: string) {
+    if (true) throw new Error('Intentional error');
+    return this.userRepository.findOne({ where: { email } });
   }
 
-  successCriteriaForRetry(options?: {
+  @usePolicy(POLICY.UnstableNetworkPolicy)
+  async networkExhaustion(email: string) {
+    this.checkNetworkBandwidth();
+    return this.userRepository.findOne({ where: { email } });
+  }
+
+  private checkNetworkBandwidth(options?: {
     timeThresholdForBandwidthRecovery?: number;
     bandwidthUtilizationReducer?: number;
   }) {
     const timeThresholdForBandwidthRecovery =
-      options.timeThresholdForBandwidthRecovery || 5 * 1000;
+      options?.timeThresholdForBandwidthRecovery || 5 * 1000;
 
     const currentTime = Date.now();
     const elapsedTimeSinceLastInvocation =
       currentTime - this.lastInvocationTime;
 
     if (elapsedTimeSinceLastInvocation > timeThresholdForBandwidthRecovery) {
-      this.bandwidthUtilization -= options.bandwidthUtilizationReducer || 10;
+      this.bandwidthUtilization -= options?.bandwidthUtilizationReducer || 10;
     }
 
     // Update lastInvocationTimeForRetry
@@ -102,35 +125,10 @@ export class UserService {
 
     if (this.bandwidthUtilization > 75)
       throw new NetworkError({
-        message: 'Timed out!',
+        message: 'Insufficient bandwidth!',
         shouldRetry: true,
       });
 
     this.bandwidthUtilization = Math.floor(Math.random() * (100 - 75) + 75);
   }
-
-  //checkNetworkBandwidth() {
-  //  const currentTime = Date.now();
-  //  const elapsedTimeSinceLastInvocation =
-  //    currentTime - this.lastInvocationTime;
-  //  const timeThresholdForBandwidthRecovery = 5 * 1000;
-  //  if (elapsedTimeSinceLastInvocation > timeThresholdForBandwidthRecovery) {
-  //    this.bandwidthUtilization -= 10;
-  //  }
-
-  //  // Update lastInvocationTime
-  //  this.lastInvocationTime = currentTime;
-
-  //  this.logger.verbose(
-  //    `Current bandwidth utilization: ${this.bandwidthUtilization}%`,
-  //  );
-
-  //  if (this.bandwidthUtilization > 75)
-  //    throw new NetworkError({
-  //      message: 'Timed out!',
-  //      shouldRetry: true,
-  //    });
-
-  //  this.bandwidthUtilization = Math.floor(Math.random() * (100 - 75) + 75);
-  //}
 }
