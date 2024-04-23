@@ -370,3 +370,15 @@ GET /user/merged/?email=theboywholived@hogwarts.com
 ---
 
 ---
+
+## Why Cockatiel Stands Out
+
+- **Comprehensive Solution:** Unlike other packages that offer limited error handling features, Cockatiel packs everything you need in one neat package. Whether it's retries, circuit breakers, or timeouts, you'll find it all here, ready to tackle any resilience challenge.
+
+- **Flexibility Built In:** Cockatiel gives you the freedom to handle errors your way. Whether you prefer decorators or method execution, you'll find a method that suits your coding style.
+
+- **Policy Merging Capabilities:** With Cockatiel, you're not limited to just one resilience strategy. You can combine different policies, like retries and circuit breakers, to create a custom solution tailored to your specific needs. It's like having a toolkit where you can pick and choose the tools you need for the job.
+
+- **Easy Integration and TypeScript Support:** It is very easy to integrate in any existing project be it a Node project or any other framework and it even supports TypeScript.
+
+- **Active Maintenance and Community Support:** Being open source and actively maintained, its ensures that it is up-to-date with latest Node.js developments and resolves issues or bugs promptly.
