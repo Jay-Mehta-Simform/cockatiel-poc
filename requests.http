@@ -1,0 +1,15 @@
+GET http://localhost:3000/user/oBreaker/?email=theboywholived@hogwarts.com
+
+###
+GET http://localhost:3000/user/retry/?email=theboywholived@hogwarts.com
+
+
+
+###
+POST http://localhost:3000/user/ HTTP/1.1
+content-type: application/json 
+
+{
+    "name": "Harry Potter",
+    "email": "theboywholived@hogwarts.com"
+}

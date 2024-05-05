@@ -101,6 +101,14 @@ export class UserService {
     return this.userRepository.findOne({ where: { email } });
   }
 
+  async getUserWithOpossum(email: string) {
+    this.checkNetworkBandwidth({
+      bandwidthUtilizationReducer: 20,
+      timeThresholdForBandwidthRecovery: 1000,
+    });
+    return this.userRepository.findOne({ where: { email } });
+  }
+
   private checkNetworkBandwidth(options?: {
     timeThresholdForBandwidthRecovery?: number;
     bandwidthUtilizationReducer?: number;
