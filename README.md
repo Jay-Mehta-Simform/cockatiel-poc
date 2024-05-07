@@ -1,6 +1,6 @@
-# POC - Cockatiel
+# POC - Cockatiel and Opossum
 
-This is a project aimed to demonstrate the usage of the Cockatiel npm package.
+This is a project aimed to demonstrate the usage of the Cockatiel and Opossum packages.
 
 ## Run Locally
 
@@ -373,6 +373,9 @@ GET /user/merged/?email=theboywholived@hogwarts.com
 
 ## Why Cockatiel Stands Out
 
+<details> 
+<summary>Expand</summary><br>
+
 - **Comprehensive Solution:** Unlike other packages that offer limited error handling features, Cockatiel packs everything you need in one neat package. Whether it's retries, circuit breakers, or timeouts, you'll find it all here, ready to tackle any resilience challenge.
 
 - **Flexibility Built In:** Cockatiel gives you the freedom to handle errors your way. Whether you prefer decorators or method execution, you'll find a method that suits your coding style.
@@ -382,3 +385,38 @@ GET /user/merged/?email=theboywholived@hogwarts.com
 - **Easy Integration and TypeScript Support:** It is very easy to integrate in any existing project be it a Node project or any other framework and it even supports TypeScript.
 
 - **Active Maintenance and Community Support:** Being open source and actively maintained, its ensures that it is up-to-date with latest Node.js developments and resolves issues or bugs promptly.
+
+</details>
+
+## About Opossum
+
+[Opossum](https://nodeshift.dev/opossum/)
+
+---
+
+---
+
+## Observations
+
+<details> 
+<summary>Expand</summary><br>
+
+> Note: These are my personal observations/opinions and may or may not be correct. Take them as food for thought and not facts.
+
+- At the end of the day, all of these are patches that protect the server from unpredictable behavior. However, they also impact performance, so they should not be considered the status quo. The priority should be to write better code to mitigate the need for such patches.
+
+- A wrongly configured policy can do more harm than good, so it's essential to monitor policies and their resulting performance closely.
+
+- It is generally better to perform retries locally using Cockatiel than to rely on the user attempting retries over the network.
+
+- Timeout utilizes AbortSignal under the hood, which means it won't be effective in cases of synchronous code. Although synchronous code is rare in Node.js, it can still lead to unexpected behavior if you try to use the policy on it.
+
+  It's important to note that the timed-out function does not get deregistered or terminated, so don't assume that if it has timed out, there will be no consequences.
+
+- Bulkhead might be challenging to understand if you dig deeper since Node.js does not have the traditional concurrency seen in multi-threaded languages.
+
+  If a function returns a promise, the function execution completes, and the executionSlot of the bulkhead policy becomes available. However, this does not account for pending promises that are still waiting in the microtask queue.
+
+- In my opinion, Fallback has very few to no use cases, as errors and failures can be handled just as easily with built-in tools.
+
+</details>

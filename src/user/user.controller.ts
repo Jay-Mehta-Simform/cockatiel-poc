@@ -26,11 +26,14 @@ export class UserController {
         resetTimeout: 3000,
       },
     );
-    this.opossumBreaker.fallback(() =>
-      this.logger.error('Sorry the network seems to be exhausted.'),
+    this.opossumBreaker.fallback(() => {
+      this.logger.error('Handle failing network');
+    }
     );
-    this.opossumBreaker.on('fallback', () =>
-      console.log(`Fallback event fired:`, this.opossumBreaker.stats),
+    this.opossumBreaker.on('fallback', () => {
+      this.logger.verbose('Fallback event fired!');
+      throw new InternalServerErrorException('Sorry the network seems to be exhausted.');
+    }
     );
   }
 
@@ -72,12 +75,23 @@ export class UserController {
   @Get('oBreaker')
   async getUserWithOpossum(@Query('email') email: string) {
     try {
-      const user = await this.opossumBreaker.fire(email);
-      // Errors won't be propogated back here so the catch will never be reached!
+      const user = await this.opossumBreaker.call(email);
       return user;
     } catch (error) {
       this.logger.error(error);
       throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  @Get('oStats')
+  async getStats() {
+    return { 
+      stats: this.opossumBreaker.stats, 
+      status: this.opossumBreaker.status, 
+      group: this.opossumBreaker.group, 
+      state: this.opossumBreaker.toJSON(), 
+      warmup: this.opossumBreaker.warmUp,
+      // And much more... 
     }
   }
 }
