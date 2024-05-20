@@ -390,7 +390,74 @@ GET /user/merged/?email=theboywholived@hogwarts.com
 
 ## About Opossum
 
-[Opossum](https://nodeshift.dev/opossum/)
+[Opossum](https://nodeshift.dev/opossum/) at first glance looks like a simple circuit breaker package. But let me tell you, it has much more to offer. The sheer amount of controls and stats that it provides is enough to make it a stand-alone reliability package. Having said that, it still leaves out many features that some other package like Cockatiel provides. Here's the list of features that Opossum provides:
+  - Circuit Breaker
+  - Fallback
+  - Event Handling
+  - Prometheus and Hystrix Compatible Metrics
+  - MemoryCache
+
+### Feature Implementation
+
+Step 1: Define a custom CircuitBreaker for your service method.
+```TypeScript
+  this.opossumBreaker = new OpossumCircuitBreaker(
+      this.userService.getUserWithOpossum.bind(this.userService),
+      {
+        timeout: 3000,
+        errorThresholdPercentage: 10,
+        resetTimeout: 3000,
+      },
+    );
+```
+> Note: You will need to bind your service method to your service class.
+
+Step 2: Define fallback and event handlers.
+```TypeScript
+  this.opossumBreaker.fallback(() => {
+      this.logger.error('Handle failing network');
+    }
+    );
+    this.opossumBreaker.on('fallback', () => {
+      this.logger.verbose('Fallback event fired!');
+      throw new InternalServerErrorException('Sorry the network seems to be exhausted.');
+    }
+```
+
+Step 3: Define controller methods to use the circuit breaker.
+```TypeScript
+@Get('oBreaker')
+  async getUserWithOpossum(@Query('email') email: string) {
+    try {
+      const user = await this.opossumBreaker.call(email);
+      return user;
+    } catch (error) {
+      this.logger.error(error);
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  @Get('oStats')
+  async getStats() {
+    return { 
+      stats: this.opossumBreaker.stats, 
+      status: this.opossumBreaker.status, 
+      group: this.opossumBreaker.group, 
+      state: this.opossumBreaker.toJSON(), 
+      warmup: this.opossumBreaker.warmUp,
+      // And much more... 
+    }
+  }
+```
+Step 4: Make requests to these REST endpoints:
+```TypeScript
+GET /user/oBreaker/?email=theboywholived@hogwarts.com
+
+GET /user/oStats
+```
+
+### Takeaway
+You can see that Opossum provides us with the capability to take control in our own hands. We can create complex situational logics to get our application behave how we want. This is particularly very helpful in places like serverless applications.
 
 ---
 
@@ -409,14 +476,16 @@ GET /user/merged/?email=theboywholived@hogwarts.com
 
 - It is generally better to perform retries locally using Cockatiel than to rely on the user attempting retries over the network.
 
-- Timeout utilizes AbortSignal under the hood, which means it won't be effective in cases of synchronous code. Although synchronous code is rare in Node.js, it can still lead to unexpected behavior if you try to use the policy on it.
+- Timeout in Cockatiel utilizes AbortSignal under the hood, which means it won't be effective in cases of synchronous code. Although synchronous code is rare in Node.js, it can still lead to unexpected behavior if you try to use the policy on it.
 
   It's important to note that the timed-out function does not get deregistered or terminated, so don't assume that if it has timed out, there will be no consequences.
 
-- Bulkhead might be challenging to understand if you dig deeper since Node.js does not have the traditional concurrency seen in multi-threaded languages.
+- Bulkhead in Cockatiel might be challenging to understand if you dig deeper since Node.js does not have the traditional concurrency seen in multi-threaded languages.
 
   If a function returns a promise, the function execution completes, and the executionSlot of the bulkhead policy becomes available. However, this does not account for pending promises that are still waiting in the microtask queue.
 
 - In my opinion, Fallback has very few to no use cases, as errors and failures can be handled just as easily with built-in tools.
+
+- Opossum might be a very useful tool to add to serverless environment such as Knative or AWS Lambda, or any container based platform, where the container being deployed.
 
 </details>
